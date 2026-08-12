@@ -2,6 +2,8 @@
 
 Claude Code / Codex の会話内容から短いタイトルを自動生成して、[herdr](https://herdr.dev) のタブ名に反映する hook。
 
+![連番だったタブ名がプロンプトの内容に合わせて書き換わる様子](docs/demo.gif)
+
 タイトルの生成は呼び出し元と同じ CLI に投げる。Claude Code なら `claude -p`、Codex なら `codex exec`。
 
 ## 必要なもの
