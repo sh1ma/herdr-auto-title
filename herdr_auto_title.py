@@ -62,12 +62,46 @@ MAX_BUDGET_USD = os.environ.get("HERDR_AUTO_TITLE_MAX_BUDGET_USD") or "0.05"
 MAX_LOG_CHARS = _env_int("HERDR_AUTO_TITLE_MAX_LOG_CHARS", 1500)
 DEBUG = _env_flag("HERDR_AUTO_TITLE_DEBUG")
 
-SYSTEM_PROMPT = (
-    "あなたは作業ログから短いタイトルを作るツールです。"
-    "入力された会話から、その作業内容を表す日本語タイトルを1つだけ出力します。"
-    "制約: 全角14文字以内 / 体言止め / 記号・引用符・句読点・絵文字を使わない / "
-    "説明や前置きを一切書かず、タイトル本文のみを1行で出力する。"
-)
+JA = "ja"
+EN = "en"
+
+
+def resolve_language() -> str:
+    """タイトルを書く言語を決める。
+
+    HERDR_AUTO_TITLE_LANG が最優先。既定の auto ではロケールを見て、日本語
+    ロケールなら日本語、それ以外は英語にする。
+    """
+    raw = (os.environ.get("HERDR_AUTO_TITLE_LANG") or "auto").strip().lower()
+    if raw.startswith(JA):
+        return JA
+    if raw and raw != "auto":
+        return EN
+    for name in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        if (os.environ.get(name) or "").strip().lower().startswith(JA):
+            return JA
+    return EN
+
+
+LANG = resolve_language()
+
+SYSTEM_PROMPTS = {
+    JA: (
+        "あなたは作業ログから短いタイトルを作るツールです。"
+        "入力された会話から、その作業内容を表す日本語タイトルを1つだけ出力します。"
+        f"制約: 全角{MAX_WIDTH // 2}文字以内 / 体言止め / "
+        "記号・引用符・句読点・絵文字を使わない / "
+        "説明や前置きを一切書かず、タイトル本文のみを1行で出力する。"
+    ),
+    EN: (
+        "You are a tool that writes a short title for a work log. "
+        "Given a conversation, you output exactly one English title describing the work. "
+        f"Constraints: at most {MAX_WIDTH} characters / a noun phrase with no trailing period / "
+        "no symbols, quotes, punctuation or emoji / "
+        "no explanation or preamble, output only the title itself on a single line."
+    ),
+}
+SYSTEM_PROMPT = SYSTEM_PROMPTS[LANG]
 
 
 def log(message: str) -> None:
@@ -312,9 +346,15 @@ def sanitize_title(raw: str) -> str:
 
 def user_message_for(conversation_log: str, agent: str) -> str:
     name = "Codex" if agent == CODEX else "Claude Code"
+    if LANG == JA:
+        return (
+            f"以下は {name} の作業セッションでユーザーが入力した発言のログです。"
+            "この作業に付けるタイトルを1行で出力してください。\n\n"
+            f"{conversation_log}"
+        )
     return (
-        f"以下は {name} の作業セッションでユーザーが入力した発言のログです。"
-        "この作業に付けるタイトルを1行で出力してください。\n\n"
+        f"Below is a log of the prompts a user typed during a {name} session. "
+        "Output a title for this work on a single line.\n\n"
         f"{conversation_log}"
     )
 
