@@ -1,10 +1,10 @@
 #!/bin/sh
-# herdr auto title を Claude Code / Codex の UserPromptSubmit hook として登録する。
+# Register herdr auto title as a UserPromptSubmit hook for Claude Code / Codex.
 #
-#   ./install.sh              見つかったエージェント全部にインストール / 更新
-#   ./install.sh --claude     Claude Code だけを対象にする
-#   ./install.sh --codex      Codex だけを対象にする
-#   ./install.sh --uninstall  アンインストール (--claude / --codex で対象を絞れる)
+#   ./install.sh              install / update for every agent found
+#   ./install.sh --claude     Claude Code only
+#   ./install.sh --codex      Codex only
+#   ./install.sh --uninstall  uninstall (narrow it down with --claude / --codex)
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -32,7 +32,7 @@ for arg in "$@"; do
 done
 
 command -v python3 >/dev/null 2>&1 || {
-  echo "python3 が見つかりません" >&2
+  echo "python3 not found" >&2
   exit 1
 }
 
@@ -46,13 +46,13 @@ if [ -z "$targets" ]; then
   fi
 fi
 if [ -z "$targets" ]; then
-  echo "Claude Code も Codex も見つかりません ($claude_dir / $codex_dir)" >&2
+  echo "neither Claude Code nor Codex found ($claude_dir / $codex_dir)" >&2
   exit 1
 fi
 
 if [ "$mode" = install ]; then
   [ -f "$source_file" ] || {
-    echo "herdr_auto_title.py が見つかりません: $source_file" >&2
+    echo "herdr_auto_title.py not found: $source_file" >&2
     exit 1
   }
 fi
@@ -95,16 +95,16 @@ if settings_path.exists():
     try:
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise SystemExit(f"{settings_path} を読めません: {exc}")
+        raise SystemExit(f"cannot read {settings_path}: {exc}")
     if not isinstance(settings, dict):
-        raise SystemExit(f"{settings_path} の中身がオブジェクトではありません")
+        raise SystemExit(f"{settings_path} does not contain an object")
 
 hooks = settings.setdefault("hooks", {})
 if not isinstance(hooks, dict):
-    raise SystemExit(f"{settings_path} の hooks がオブジェクトではありません")
+    raise SystemExit(f"hooks in {settings_path} is not an object")
 entries = hooks.get(event) or []
 if not isinstance(entries, list):
-    raise SystemExit(f"{settings_path} の hooks.{event} が配列ではありません")
+    raise SystemExit(f"hooks.{event} in {settings_path} is not an array")
 
 
 def is_ours(hook):
@@ -160,11 +160,11 @@ PY
 done
 
 echo
-echo "新しい設定は次に起動するセッションから有効になります。"
+echo "The new setting takes effect from the next session you start."
 case " $targets " in
   *" codex "*)
     if [ "$mode" = install ]; then
-      echo "Codex は未確認の hook を実行しません。次回起動時のレビュー画面か /hooks で信頼してください。"
+      echo "Codex does not run hooks it has not been told to trust. Trust it on the review screen at the next startup, or via /hooks."
     fi
     ;;
 esac
