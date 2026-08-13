@@ -69,6 +69,18 @@ export HERDR_AUTO_TITLE_LANG=ja
 
 登録を消し、置いたスクリプトを削除する。状態ファイル（`~/.claude/herdr-auto-title/`）は残るので、不要なら手で消す。
 
+## 開発
+
+lint とフォーマットは [ruff](https://docs.astral.sh/ruff/)（設定は `ruff.toml`）、`install.sh` は [shellcheck](https://www.shellcheck.net/) で見ている。どちらもプルリクエストごとに CI で走る。
+
+```sh
+uvx ruff check          # lint
+uvx ruff format         # フォーマット
+uvx --from shellcheck-py shellcheck install.sh
+```
+
+スクリプトは Python 3.9 の構文で動く状態を保っていて、それも CI で確認している。
+
 ## ライセンス
 
 MIT

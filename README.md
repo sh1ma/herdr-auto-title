@@ -69,6 +69,18 @@ The new value applies to sessions started after that.
 
 It removes the registration and deletes the installed script. State files (`~/.claude/herdr-auto-title/`) are left behind; delete them by hand if you do not want them.
 
+## Development
+
+Lint and formatting are handled by [ruff](https://docs.astral.sh/ruff/) (configured in `ruff.toml`), and `install.sh` by [shellcheck](https://www.shellcheck.net/). Both run on every pull request.
+
+```sh
+uvx ruff check          # lint
+uvx ruff format         # format
+uvx --from shellcheck-py shellcheck install.sh
+```
+
+The script is kept compatible with Python 3.9 syntax; CI verifies that too.
+
 ## License
 
 MIT

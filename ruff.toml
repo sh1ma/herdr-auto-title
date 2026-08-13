@@ -1,0 +1,18 @@
+# 単一スクリプト構成なので、パッケージ定義は置かずに ruff の設定だけをここに持つ。
+# 3.9 で構文互換なことを確認済み (from __future__ import annotations 前提)。
+target-version = "py39"
+# 日本語を含む行やプロンプト文字列が 88 に収まらないため少し広げている
+line-length = 100
+
+[lint]
+select = [
+  "E",   # pycodestyle error
+  "W",   # pycodestyle warning
+  "F",   # pyflakes
+  "I",   # isort
+  "UP",  # pyupgrade
+  "B",   # flake8-bugbear
+  "SIM", # flake8-simplify
+  "C4",  # flake8-comprehensions
+  "RUF", # ruff 固有
+]

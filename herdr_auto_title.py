@@ -45,8 +45,7 @@ def _env_flag(name: str) -> bool:
 
 
 STATE_DIR = Path(
-    os.environ.get("HERDR_AUTO_TITLE_STATE_DIR")
-    or (Path.home() / ".claude" / "herdr-auto-title")
+    os.environ.get("HERDR_AUTO_TITLE_STATE_DIR") or (Path.home() / ".claude" / "herdr-auto-title")
 )
 # タイトル生成に使う CLI。auto は hook を呼んだエージェント側を優先する
 BACKEND = (os.environ.get("HERDR_AUTO_TITLE_BACKEND") or "auto").strip().lower()
@@ -308,8 +307,9 @@ def build_conversation_log(prompts: list[str]) -> str:
 
 # ---------------------------------------------------------------- タイトル生成
 
-TRIM_CHARS = " \t　\"'`「」『』【】[]()<>*#-—…。．.:："
-PREFIX_RE = re.compile(r"^(タイトル|title)\s*[:：]\s*", re.IGNORECASE)
+# 全角記号は日本語タイトルから削るために意図的に並べている
+TRIM_CHARS = " \t　\"'`「」『』【】[]()<>*#-—…。．.:："  # noqa: RUF001
+PREFIX_RE = re.compile(r"^(タイトル|title)\s*[:：]\s*", re.IGNORECASE)  # noqa: RUF001
 
 
 def display_width(text: str) -> int:
