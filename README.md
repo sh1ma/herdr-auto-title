@@ -87,6 +87,38 @@ The new value applies to sessions started after that.
 
 It removes the registration and deletes the installed script. State files (`~/.claude/herdr-auto-title/`) are left behind; delete them by hand if you do not want them.
 
+## Versioning
+
+Calendar Versioning, as `YYYY.0M.0D.MICRO`. The last segment is a counter so that several releases on the same day never collide.
+
+```
+2026.08.13.0   first release of the day
+2026.08.13.1   second release the same day
+2026.08.14.0   back to 0 once the date changes
+```
+
+To check what you have installed:
+
+```sh
+python3 ~/.claude/hooks/herdr-auto-title.py --version
+```
+
+## Development
+
+```sh
+python3 -m unittest discover -s tests   # tests
+ruff check . && ruff format --check .   # lint / formatting
+shellcheck install.sh
+```
+
+CI (`.github/workflows/ci.yml`) runs the above on push and pull request, plus an `install.sh` round trip (install → install again → uninstall) and the test suite on Python 3.9 through 3.13.
+
+Releases are cut by running the **Release** workflow from the Actions tab. The version comes from the existing tags and today's date (`Asia/Tokyo`), so there is no number to pick: the workflow rewrites `__version__`, commits, pushes the tag and creates the GitHub Release. To see the number that would be used, turn on `dry_run`, or run it locally:
+
+```sh
+python3 scripts/calver.py next
+```
+
 ## License
 
 MIT

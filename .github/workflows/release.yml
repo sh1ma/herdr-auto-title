@@ -1,0 +1,70 @@
+name: Release
+
+# Calendar Versioning (YYYY.0M.0D.MICRO) でリリースする。
+# バージョンは既存タグと当日の日付から決まるので、手で番号を考える必要はない。
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "タグを作らず、次のバージョンだけ確認する"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      # 日付でバージョンが決まるので、リリース日は日本時間で数える
+      TZ: Asia/Tokyo
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 既存タグから MICRO を決めるので、履歴とタグを全部取る
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: テスト
+        run: python -m unittest discover -s tests
+
+      # 算出と書き込みを分けると日付が変わる瞬間に食い違うので、1 ステップで済ませる
+      - name: 次のバージョンを決めてソースに書き込む
+        id: calver
+        run: |
+          version=$(python3 scripts/calver.py bump)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "### v$version" >> "$GITHUB_STEP_SUMMARY"
+          git --no-pager diff
+
+      - name: dry run なのでここで終わる
+        if: inputs.dry_run
+        run: echo "v${{ steps.calver.outputs.version }} を作るところだった (タグは作っていない)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: コミットしてタグを push する
+        if: ${{ !inputs.dry_run }}
+        env:
+          TAG: ${{ steps.calver.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add herdr_auto_title.py
+          git commit -m "release $TAG"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+          git push origin "$TAG"
+
+      - name: GitHub Release を作る
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.calver.outputs.tag }}
+        run: gh release create "$TAG" --title "$TAG" --generate-notes --verify-tag

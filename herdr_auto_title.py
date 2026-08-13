@@ -24,6 +24,9 @@ from shutil import which
 
 SOURCE = "herdr-auto-title"
 
+# Calendar Versioning (YYYY.0M.0D.MICRO)。リリースワークフローが書き換える。
+__version__ = "unreleased"
+
 CLAUDE = "claude"
 CODEX = "codex"
 
@@ -45,8 +48,7 @@ def _env_flag(name: str) -> bool:
 
 
 STATE_DIR = Path(
-    os.environ.get("HERDR_AUTO_TITLE_STATE_DIR")
-    or (Path.home() / ".claude" / "herdr-auto-title")
+    os.environ.get("HERDR_AUTO_TITLE_STATE_DIR") or (Path.home() / ".claude" / "herdr-auto-title")
 )
 # タイトル生成に使う CLI。auto は hook を呼んだエージェント側を優先する
 BACKEND = (os.environ.get("HERDR_AUTO_TITLE_BACKEND") or "auto").strip().lower()
@@ -376,6 +378,7 @@ def run_generator(command: list[str], stdin_text: str | None) -> subprocess.Comp
             capture_output=True,
             text=True,
             timeout=TIMEOUT_SEC,
+            check=False,
             # プロジェクト固有の設定を巻き込まないよう作業ディレクトリを離す
             cwd=str(Path.home()),
             env=child_env(),
@@ -620,6 +623,10 @@ def daemonize() -> None:
 
 
 def main() -> int:
+    if "--version" in sys.argv[1:]:
+        print(f"{SOURCE} {__version__}")
+        return 0
+
     raw = sys.stdin.read()
     try:
         hook_input = json.loads(raw) if raw.strip() else {}

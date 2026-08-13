@@ -87,6 +87,38 @@ export HERDR_AUTO_TITLE_LANG=ja
 
 登録を消し、置いたスクリプトを削除する。状態ファイル（`~/.claude/herdr-auto-title/`）は残るので、不要なら手で消す。
 
+## バージョン
+
+Calendar Versioning。`YYYY.0M.0D.MICRO` で、末尾は同じ日に何度リリースしても衝突しないための連番。
+
+```
+2026.08.13.0   その日の 1 回目
+2026.08.13.1   同じ日の 2 回目
+2026.08.14.0   日付が変われば 0 に戻る
+```
+
+入っているものを確かめるとき:
+
+```sh
+python3 ~/.claude/hooks/herdr-auto-title.py --version
+```
+
+## 開発
+
+```sh
+python3 -m unittest discover -s tests   # テスト
+ruff check . && ruff format --check .   # lint / 整形
+shellcheck install.sh
+```
+
+CI（`.github/workflows/ci.yml`）は push と pull request で、上記に加えて `install.sh` の install → 冪等性 → uninstall を Python 3.9〜3.13 で確かめる。
+
+リリースは Actions の **Release** ワークフローを手で流す。バージョンは既存タグと当日の日付（`Asia/Tokyo`）から決まるので、番号を指定する必要はない。ワークフローは `__version__` の書き換え、コミット、タグ push、GitHub Release の作成までやる。次に付く番号だけ知りたいときは `dry_run` を on にするか、手元で:
+
+```sh
+python3 scripts/calver.py next
+```
+
 ## ライセンス
 
 MIT

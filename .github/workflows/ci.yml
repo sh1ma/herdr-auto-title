@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      # ruff のバージョンを固定する。更新で新ルールが増えても CI が突然落ちないように。
+      - run: pip install ruff==0.16.2
+      - run: ruff check --output-format github .
+      - run: ruff format --check .
+
+  shell:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # shellcheck は ubuntu-latest ランナーに同梱されている
+      - run: shellcheck install.sh
+
+  test:
+    name: test (python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # hook は「入っている python3」で動く必要があるので、古い方も見る
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m unittest discover -s tests -v
+      - run: python herdr_auto_title.py --version
+
+  install:
+    name: install.sh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: 本物の HOME を触らせないための設定ディレクトリを用意する
+        run: |
+          echo "CLAUDE_CONFIG_DIR=$RUNNER_TEMP/claude" >> "$GITHUB_ENV"
+          echo "CODEX_HOME=$RUNNER_TEMP/codex" >> "$GITHUB_ENV"
+      - name: install (2 回流して冪等性も見る)
+        run: |
+          ./install.sh --claude --codex
+          ./install.sh --claude --codex
+          test -x "$CLAUDE_CONFIG_DIR/hooks/herdr-auto-title.py"
+          test -x "$CODEX_HOME/hooks/herdr-auto-title.py"
+          test "$(grep -c herdr-auto-title.py "$CLAUDE_CONFIG_DIR/settings.json")" -eq 1
+          test "$(grep -c herdr-auto-title.py "$CODEX_HOME/hooks.json")" -eq 1
+      - name: 入れた hook が herdr の外では黙って抜ける
+        run: |
+          echo '{}' | python3 "$CLAUDE_CONFIG_DIR/hooks/herdr-auto-title.py"
+      - name: uninstall
+        run: |
+          ./install.sh --uninstall --claude --codex
+          test ! -e "$CLAUDE_CONFIG_DIR/hooks/herdr-auto-title.py"
+          test ! -e "$CODEX_HOME/hooks/herdr-auto-title.py"
+          test "$(cat "$CLAUDE_CONFIG_DIR/settings.json")" = "{}"
+          test "$(cat "$CODEX_HOME/hooks.json")" = "{}"

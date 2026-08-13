@@ -1,0 +1,10 @@
+# hook は標準ライブラリだけで動く必要があるので、対象は Python 3.9 以上。
+target-version = "py39"
+# 既存コードの書きぶりに合わせる (既定の 88 だと日本語コメント混じりの行が引っかかる)
+line-length = 100
+# 作業用の worktree コピーが混ざることがある
+extend-exclude = [".claude"]
+
+[lint]
+# 既定のルール集合は ruff のバージョンで変わるため、CI が勝手に壊れないよう明示する
+select = ["E", "W", "F", "I", "UP", "B", "C4", "SIM", "RET"]

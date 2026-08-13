@@ -7,7 +7,7 @@
 #   ./install.sh --uninstall  uninstall (narrow it down with --claude / --codex)
 set -eu
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 source_file="$script_dir/herdr_auto_title.py"
 claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 codex_dir="${CODEX_HOME:-$HOME/.codex}"
