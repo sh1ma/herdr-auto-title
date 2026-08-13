@@ -1,10 +1,28 @@
-# herdr auto title
+<h1 align="center">herdr auto title</h1>
 
-Claude Code / Codex の会話内容から短いタイトルを自動生成して、[herdr](https://herdr.dev) のタブ名に反映する hook。
+<p align="center">
+  Claude Code / Codex の会話内容から短いタイトルを自動生成して、<a href="https://herdr.dev">herdr</a> のタブ名に反映する hook。
+</p>
 
-English version: [README.md](README.md)
+<p align="center">
+  <a href="#インストール">インストール</a> · <a href="#タイトルの言語">タイトルの言語</a> · <a href="#アンインストール">アンインストール</a> · <a href="https://herdr.dev">herdr.dev</a>
+</p>
 
-![連番だったタブ名がプロンプトの内容に合わせて書き換わる様子](docs/demo.gif)
+<p align="center">
+  <a href="README.md">English</a> · 日本語
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-666666?labelColor=333333" alt="MIT license" /></a>
+  <a href="https://github.com/sh1ma/herdr-auto-title/stargazers"><img src="https://img.shields.io/github/stars/sh1ma/herdr-auto-title?labelColor=333333&color=666666&logo=github" alt="GitHub stars" /></a>
+  <a href="https://x.com/sh1ma"><img src="https://img.shields.io/badge/follow-%40sh1ma-000000?logo=x&logoColor=white" alt="follow @sh1ma on X" /></a>
+</p>
+
+---
+
+<p align="center">
+  <img src="docs/demo.gif" alt="連番だったタブ名がプロンプトの内容に合わせて書き換わる様子" />
+</p>
 
 タイトルの生成は呼び出し元と同じ CLI に投げる。Claude Code なら `claude -p`、Codex なら `codex exec`。
 
