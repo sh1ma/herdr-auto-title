@@ -60,21 +60,32 @@ jobs:
         run: |
           echo "CLAUDE_CONFIG_DIR=$RUNNER_TEMP/claude" >> "$GITHUB_ENV"
           echo "CODEX_HOME=$RUNNER_TEMP/codex" >> "$GITHUB_ENV"
+          echo "PI_CODING_AGENT_DIR=$RUNNER_TEMP/pi-agent" >> "$GITHUB_ENV"
       - name: install (2 回流して冪等性も見る)
         run: |
-          ./install.sh --claude --codex
-          ./install.sh --claude --codex
+          # Pi 0.83 以前のインストールが作った hooks/ も移行できる。
+          mkdir -p "$PI_CODING_AGENT_DIR/hooks"
+          touch "$PI_CODING_AGENT_DIR/hooks/herdr-auto-title.py"
+          ./install.sh --claude --codex --pi
+          ./install.sh --claude --codex --pi
           test -x "$CLAUDE_CONFIG_DIR/hooks/herdr-auto-title.py"
           test -x "$CODEX_HOME/hooks/herdr-auto-title.py"
-          test "$(grep -c herdr-auto-title.py "$CLAUDE_CONFIG_DIR/settings.json")" -eq 1
+          test -x "$PI_CODING_AGENT_DIR/herdr-auto-title/herdr-auto-title.py"
+          test -f "$PI_CODING_AGENT_DIR/extensions/herdr-auto-title.ts"
+          test ! -e "$PI_CODING_AGENT_DIR/hooks"
+          claude_settings="$CLAUDE_CONFIG_DIR/settings.json"
+          claude_hooks=$(grep -c herdr-auto-title.py "$claude_settings")
+          test "$claude_hooks" -eq 1
           test "$(grep -c herdr-auto-title.py "$CODEX_HOME/hooks.json")" -eq 1
       - name: 入れた hook が herdr の外では黙って抜ける
         run: |
           echo '{}' | python3 "$CLAUDE_CONFIG_DIR/hooks/herdr-auto-title.py"
       - name: uninstall
         run: |
-          ./install.sh --uninstall --claude --codex
+          ./install.sh --uninstall --claude --codex --pi
           test ! -e "$CLAUDE_CONFIG_DIR/hooks/herdr-auto-title.py"
           test ! -e "$CODEX_HOME/hooks/herdr-auto-title.py"
+          test ! -e "$PI_CODING_AGENT_DIR/herdr-auto-title/herdr-auto-title.py"
+          test ! -e "$PI_CODING_AGENT_DIR/extensions/herdr-auto-title.ts"
           test "$(cat "$CLAUDE_CONFIG_DIR/settings.json")" = "{}"
           test "$(cat "$CODEX_HOME/hooks.json")" = "{}"
