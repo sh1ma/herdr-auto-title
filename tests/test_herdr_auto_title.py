@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -170,6 +171,29 @@ class DetectAgentTest(unittest.TestCase):
         self.assertEqual(hat.detect_agent({}), hat.CLAUDE)
         self.assertEqual(hat.detect_agent({"turn_id": ""}), hat.CLAUDE)
 
+    def test_explicit_pi_agent_is_detected(self):
+        self.assertEqual(hat.detect_agent({"agent": "pi"}), hat.PI)
+
+
+class PiGeneratorTest(unittest.TestCase):
+    @mock.patch.object(hat, "run_generator")
+    def test_runs_pi_in_isolated_print_mode(self, run_generator):
+        run_generator.return_value = subprocess.CompletedProcess([], 0, "Fix title generator\n", "")
+
+        self.assertEqual(
+            hat.generate_with_pi("1. fix the title generator", "openai-codex/gpt-5.6-terra"),
+            "Fix title generator",
+        )
+
+        command, prompt = run_generator.call_args.args
+        self.assertEqual(command[:2], ["pi", "-p"])
+        self.assertIn("--no-extensions", command)
+        self.assertIn("--no-context-files", command)
+        self.assertIn("--no-tools", command)
+        self.assertIn("--model", command)
+        self.assertIn("openai-codex/gpt-5.6-terra", command)
+        self.assertIn("Pi session", prompt)
+
 
 class TranscriptTest(unittest.TestCase):
     def write_jsonl(self, entries):
@@ -231,6 +255,9 @@ class StatePathTest(unittest.TestCase):
         self.assertEqual(hat.state_path("abc-123").name, "abc-123.json")
         self.assertEqual(hat.state_path("../etc/passwd").name, ".._etc_passwd.json")
         self.assertEqual(hat.state_path("").name, "unknown.json")
+
+    def test_invalid_state_counter_becomes_zero(self):
+        self.assertEqual(hat.state_int({"prompt_count": "bad"}, "prompt_count"), 0)
 
 
 class MainGuardTest(unittest.TestCase):

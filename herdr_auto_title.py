@@ -29,6 +29,7 @@ __version__ = "unreleased"
 
 CLAUDE = "claude"
 CODEX = "codex"
+PI = "pi"
 
 # ---------------------------------------------------------------- 設定
 
@@ -53,7 +54,7 @@ STATE_DIR = Path(
 # タイトル生成に使う CLI。auto は hook を呼んだエージェント側を優先する
 BACKEND = (os.environ.get("HERDR_AUTO_TITLE_BACKEND") or "auto").strip().lower()
 MODEL = os.environ.get("HERDR_AUTO_TITLE_MODEL") or ""
-DEFAULT_MODEL = {CLAUDE: "haiku", CODEX: "gpt-5.4-mini"}
+DEFAULT_MODEL = {CLAUDE: "haiku", CODEX: "gpt-5.4-mini", PI: ""}
 # タブバーに収まる表示幅 (半角を 1, 全角を 2 として数える)
 MAX_WIDTH = _env_int("HERDR_AUTO_TITLE_MAX_WIDTH", 28)
 # 何プロンプトごとにタイトルを作り直すか。既定の 0 は「最初に付けたら以後変えない」
@@ -150,8 +151,8 @@ def herdr_call(method: str, params: dict, timeout: float = 3.0) -> dict | None:
         return None
     try:
         return json.loads(line)
-    except json.JSONDecodeError:
-        log(f"bad response for {method}: {line[:200]}")
+    except json.JSONDecodeError as exc:
+        log(f"bad response for {method}: {line[:200]} ({exc})")
         return None
 
 
@@ -221,7 +222,8 @@ def iter_transcript_entries(transcript_path: str | None):
             continue
         try:
             entry = json.loads(line)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            log(f"skipping invalid transcript entry: {exc}")
             continue
         if isinstance(entry, dict):
             yield entry
@@ -347,7 +349,7 @@ def sanitize_title(raw: str) -> str:
 
 
 def user_message_for(conversation_log: str, agent: str) -> str:
-    name = "Codex" if agent == CODEX else "Claude Code"
+    name = {CLAUDE: "Claude Code", CODEX: "Codex", PI: "Pi"}.get(agent, "Claude Code")
     if LANG == JA:
         return (
             f"以下は {name} の作業セッションでユーザーが入力した発言のログです。"
@@ -385,8 +387,8 @@ def run_generator(command: list[str], stdin_text: str | None) -> subprocess.Comp
         )
     except FileNotFoundError:
         log(f"{command[0]} command not found")
-    except subprocess.TimeoutExpired:
-        log(f"{command[0]} timed out")
+    except subprocess.TimeoutExpired as exc:
+        log(f"{command[0]} timed out after {exc.timeout}s")
     return None
 
 
@@ -413,6 +415,33 @@ def generate_with_claude(conversation_log: str, model: str) -> str:
         return ""
     if completed.returncode != 0:
         log(f"claude -p failed ({completed.returncode}): {completed.stderr[:300]}")
+        return ""
+    return sanitize_title(completed.stdout)
+
+
+def generate_with_pi(conversation_log: str, model: str) -> str:
+    """pi -p を最小構成で呼び、タイトル 1 行を得る。"""
+    command = [
+        "pi",
+        "-p",
+        # 子プロセスがこの拡張を読み込んで再帰するのを防ぎ、作業設定も読ませない。
+        "--no-session",
+        "--no-extensions",
+        "--no-context-files",
+        "--no-skills",
+        "--no-prompt-templates",
+        "--no-themes",
+        "--no-tools",
+        "--system-prompt",
+        SYSTEM_PROMPT,
+    ]
+    if model:
+        command.extend(["--model", model])
+    completed = run_generator(command, user_message_for(conversation_log, PI))
+    if completed is None:
+        return ""
+    if completed.returncode != 0:
+        log(f"pi -p failed ({completed.returncode}): {completed.stderr[:300]}")
         return ""
     return sanitize_title(completed.stdout)
 
@@ -468,8 +497,10 @@ def generate_with_codex(conversation_log: str, model: str) -> str:
 
 def resolve_backend(agent: str) -> str:
     """どの CLI でタイトルを作るか決める。"""
-    if BACKEND in (CLAUDE, CODEX):
+    if BACKEND in (CLAUDE, CODEX, PI):
         return BACKEND
+    if agent == PI:
+        return PI
     # 既定は hook を呼んだエージェント自身。無ければもう一方に回す
     other = CODEX if agent == CLAUDE else CLAUDE
     for candidate in (agent, other):
@@ -478,10 +509,13 @@ def resolve_backend(agent: str) -> str:
     return agent
 
 
-def generate_title(conversation_log: str, agent: str) -> str:
+def generate_title(conversation_log: str, agent: str, requested_model: str = "") -> str:
     backend = resolve_backend(agent)
-    model = MODEL or DEFAULT_MODEL[backend]
-    log(f"generating with {backend} ({model})")
+    # Pi 拡張は現在選択中のモデルを渡せる。別の CLI を明示した場合は渡さない。
+    model = MODEL or (requested_model if backend == PI else "") or DEFAULT_MODEL[backend]
+    log(f"generating with {backend} ({model or 'default'})")
+    if backend == PI:
+        return generate_with_pi(conversation_log, model)
     if backend == CODEX:
         return generate_with_codex(conversation_log, model)
     return generate_with_claude(conversation_log, model)
@@ -512,6 +546,15 @@ def save_state(path: Path, state: dict) -> None:
 AUTO_LABEL_RE = re.compile(r"^\d+$")
 
 
+def state_int(state: dict, key: str) -> int:
+    """状態ファイルの任意値を安全に整数として読み込む。"""
+    try:
+        return int(state.get(key, 0))
+    except (TypeError, ValueError) as exc:
+        log(f"invalid state value for {key}: {exc}")
+        return 0
+
+
 def may_overwrite(label: str | None, previous_title: str | None) -> bool:
     """このタブ名を上書きしてよいか判定する。
 
@@ -529,10 +572,13 @@ def may_overwrite(label: str | None, previous_title: str | None) -> bool:
 
 
 def detect_agent(hook_input: dict) -> str:
-    """hook を呼んだのが Claude Code と Codex のどちらかを見分ける。
+    """hook を呼んだエージェントを見分ける。
 
-    hook 入力のフィールドはおおむね共通だが、turn_id は Codex にしかない。
+    Pi 拡張は agent を明示する。Claude Code / Codex の入力はおおむね共通だが、
+    turn_id は Codex にしかない。
     """
+    if hook_input.get("agent") == PI:
+        return PI
     if hook_input.get("turn_id"):
         return CODEX
     return CLAUDE
@@ -552,8 +598,8 @@ def run(hook_input: dict) -> None:
         return
 
     state = load_state(path)
-    prompt_count = int(state.get("prompt_count", 0)) + 1
-    generated_at = int(state.get("generated_at_prompt", 0))
+    prompt_count = state_int(state, "prompt_count") + 1
+    generated_at = state_int(state, "generated_at_prompt")
     previous_title = state.get("title")
 
     state["prompt_count"] = prompt_count
@@ -591,7 +637,7 @@ def run(hook_input: dict) -> None:
         log("no usable user prompts")
         return
 
-    title = generate_title(conversation_log, agent)
+    title = generate_title(conversation_log, agent, hook_input.get("model") or "")
     if not title:
         log("no title generated")
         return
@@ -630,7 +676,8 @@ def main() -> int:
     raw = sys.stdin.read()
     try:
         hook_input = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        log(f"invalid hook input: {exc}")
         hook_input = {}
 
     if _env_flag("HERDR_AUTO_TITLE_DISABLE"):

@@ -1,33 +1,37 @@
 #!/bin/sh
-# Register herdr auto title as a UserPromptSubmit hook for Claude Code / Codex.
+# Register herdr auto title for Claude Code, Codex, and Pi.
 #
 #   ./install.sh              install / update for every agent found
 #   ./install.sh --claude     Claude Code only
 #   ./install.sh --codex      Codex only
-#   ./install.sh --uninstall  uninstall (narrow it down with --claude / --codex)
+#   ./install.sh --pi         Pi only
+#   ./install.sh --uninstall  uninstall (narrow it down with an agent option)
 set -eu
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 source_file="$script_dir/herdr_auto_title.py"
+pi_source_file="$script_dir/pi_extension.ts"
 claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 codex_dir="${CODEX_HOME:-$HOME/.codex}"
+pi_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
 
 mode=install
 targets=""
 
 for arg in "$@"; do
   case "$arg" in
-    --uninstall) mode=uninstall ;;
-    --claude) targets="$targets claude" ;;
-    --codex) targets="$targets codex" ;;
-    -h | --help)
-      sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
-      exit 0
-      ;;
-    *)
-      echo "usage: $0 [--claude] [--codex] [--uninstall]" >&2
-      exit 2
-      ;;
+  --uninstall) mode=uninstall ;;
+  --claude) targets="$targets claude" ;;
+  --codex) targets="$targets codex" ;;
+  --pi) targets="$targets pi" ;;
+  -h | --help)
+    sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+  *)
+    echo "usage: $0 [--claude] [--codex] [--pi] [--uninstall]" >&2
+    exit 2
+    ;;
   esac
 done
 
@@ -44,9 +48,12 @@ if [ -z "$targets" ]; then
   if [ -d "$codex_dir" ] || command -v codex >/dev/null 2>&1; then
     targets="$targets codex"
   fi
+  if [ -d "$pi_dir" ] || command -v pi >/dev/null 2>&1; then
+    targets="$targets pi"
+  fi
 fi
 if [ -z "$targets" ]; then
-  echo "neither Claude Code nor Codex found ($claude_dir / $codex_dir)" >&2
+  echo "neither Claude Code, Codex, nor Pi found ($claude_dir / $codex_dir / $pi_dir)" >&2
   exit 1
 fi
 
@@ -59,19 +66,49 @@ fi
 
 for target in $targets; do
   case "$target" in
-    claude)
-      hook_file="$claude_dir/hooks/herdr-auto-title.py"
-      settings_file="$claude_dir/settings.json"
-      label="Claude Code"
-      ;;
-    codex)
-      hook_file="$codex_dir/hooks/herdr-auto-title.py"
-      settings_file="$codex_dir/hooks.json"
-      label="Codex"
-      ;;
+  claude)
+    hook_file="$claude_dir/hooks/herdr-auto-title.py"
+    settings_file="$claude_dir/settings.json"
+    label="Claude Code"
+    ;;
+  codex)
+    hook_file="$codex_dir/hooks/herdr-auto-title.py"
+    settings_file="$codex_dir/hooks.json"
+    label="Codex"
+    ;;
+  pi)
+    hook_file="$pi_dir/herdr-auto-title/herdr-auto-title.py"
+    legacy_hook_file="$pi_dir/hooks/herdr-auto-title.py"
+    extension_file="$pi_dir/extensions/herdr-auto-title.ts"
+    label="Pi"
+    ;;
   esac
 
   echo "--- $label"
+  if [ "$target" = pi ]; then
+    if [ "$mode" = install ]; then
+      [ -f "$pi_source_file" ] || {
+        echo "pi_extension.ts not found: $pi_source_file" >&2
+        exit 1
+      }
+      mkdir -p "$(dirname -- "$hook_file")" "$(dirname -- "$extension_file")"
+      cp "$source_file" "$hook_file"
+      chmod +x "$hook_file"
+      cp "$pi_source_file" "$extension_file"
+      # Pi reserves hooks/ for its deprecated extension format. Remove only
+      # this integration's old file, then remove the directory if it is empty.
+      rm -f "$legacy_hook_file"
+      rmdir "$pi_dir/hooks" 2>/dev/null || :
+      echo "installed: Pi input extension -> $extension_file"
+    else
+      rm -f "$hook_file" "$legacy_hook_file" "$extension_file"
+      rmdir "$(dirname -- "$hook_file")" "$pi_dir/hooks" 2>/dev/null || :
+      echo "removed: $hook_file"
+      echo "removed: $extension_file"
+    fi
+    continue
+  fi
+
   if [ "$mode" = install ]; then
     mkdir -p "$(dirname -- "$hook_file")"
     cp "$source_file" "$hook_file"
@@ -162,9 +199,16 @@ done
 echo
 echo "The new setting takes effect from the next session you start."
 case " $targets " in
-  *" codex "*)
-    if [ "$mode" = install ]; then
-      echo "Codex does not run hooks it has not been told to trust. Trust it on the review screen at the next startup, or via /hooks."
-    fi
-    ;;
+*" codex "*)
+  if [ "$mode" = install ]; then
+    echo "Codex does not run hooks it has not been told to trust. Trust it on the review screen at the next startup, or via /hooks."
+  fi
+  ;;
+esac
+case " $targets " in
+*" pi "*)
+  if [ "$mode" = install ]; then
+    echo "Pi: start a new session, or run /reload in an existing one, to load the extension."
+  fi
+  ;;
 esac
