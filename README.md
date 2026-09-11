@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="#install">install</a> · <a href="#title-language">title language</a> · <a href="#uninstall">uninstall</a> · <a href="https://herdr.dev">herdr.dev</a>
+  <a href="#install">install</a> · <a href="#when-a-tab-gets-renamed">renaming</a> · <a href="#title-language">title language</a> · <a href="#uninstall">uninstall</a> · <a href="https://herdr.dev">herdr.dev</a>
 </p>
 
 <p align="center">
@@ -57,6 +57,12 @@ Existing hook settings are kept, and re-running does not duplicate the registrat
 It takes effect **from the next session you start**.
 
 Codex does not run hooks it has not been told to trust. Trust it on the review screen shown at the next startup, or via `/hooks`. (What gets trusted is the registered command string, so reinstalling does not ask again unless you move the script.)
+
+## When a tab gets renamed
+
+The title is generated from the first prompt of a session and written to the tab. Only a tab that still carries herdr's default numbered label, or a title this hook wrote earlier, is touched. A name you typed yourself is left alone.
+
+Starting a new session in a tab this hook has already named (say, quitting the agent and launching it again in the same pane, or opening a different agent there) generates a fresh title for the new session. The hook remembers which title it gave each tab under `~/.claude/herdr-auto-title/tabs/`, so it can tell its own titles apart from ones you typed.
 
 ## Title language
 

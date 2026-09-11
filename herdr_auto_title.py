@@ -490,9 +490,21 @@ def generate_title(conversation_log: str, agent: str) -> str:
 # ---------------------------------------------------------------- 状態
 
 
+def _safe_name(raw: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "_", raw) or "unknown"
+
+
 def state_path(session_id: str) -> Path:
-    safe = re.sub(r"[^A-Za-z0-9._-]", "_", session_id) or "unknown"
-    return STATE_DIR / f"{safe}.json"
+    return STATE_DIR / f"{_safe_name(session_id)}.json"
+
+
+def tab_state_path(tab_id: str) -> Path:
+    """タブ単位の記録。このツールがそのタブに最後に付けたタイトルを覚えておく。
+
+    セッション単位の状態だけだと、同じタブで別のセッションを始めたときに前の
+    セッションが付けたタイトルを「ユーザーが手で付けた名前」と区別できない。
+    """
+    return STATE_DIR / "tabs" / f"{_safe_name(tab_id)}.json"
 
 
 def load_state(path: Path) -> dict:
@@ -504,6 +516,7 @@ def load_state(path: Path) -> dict:
 
 def save_state(path: Path, state: dict) -> None:
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
     except OSError as exc:
         log(f"cannot save state: {exc}")
@@ -512,17 +525,24 @@ def save_state(path: Path, state: dict) -> None:
 AUTO_LABEL_RE = re.compile(r"^\d+$")
 
 
-def may_overwrite(label: str | None, previous_title: str | None) -> bool:
+def may_overwrite(
+    label: str | None,
+    previous_title: str | None,
+    tab_title: str | None = None,
+) -> bool:
     """このタブ名を上書きしてよいか判定する。
 
-    herdr が付ける既定ラベル (連番) と、前回自分が付けたタイトルだけを対象にし、
-    ユーザーが手で付けた名前は尊重して触らない。
+    herdr が付ける既定ラベル (連番) と、自分が付けたタイトルだけを対象にし、
+    ユーザーが手で付けた名前は尊重して触らない。previous_title はこのセッションが
+    前回付けたもの、tab_title はこのタブに (別のセッションも含めて) 最後に付けた
+    もの。後者があるので、同じタブで新しいセッションを始めたときも前のセッションの
+    タイトルを付け直せる。
     """
     if label is None or not label.strip():
         return True
     if AUTO_LABEL_RE.match(label.strip()):
         return True
-    return previous_title is not None and label == previous_title
+    return label in {title for title in (previous_title, tab_title) if title is not None}
 
 
 # ---------------------------------------------------------------- 本体
@@ -574,10 +594,14 @@ def run(hook_input: dict) -> None:
         log("cannot resolve tab id")
         return
 
+    tab_path = tab_state_path(tab_id)
+    tab_title = load_state(tab_path).get("title")
     label = get_tab_label(tab_id)
-    if not may_overwrite(label, previous_title):
+    if not may_overwrite(label, previous_title, tab_title):
         log(f"tab {tab_id} has a manual label {label!r}; leaving it alone")
         return
+    if previous_title is None and label is not None and label == tab_title:
+        log(f"tab {tab_id} still carries {label!r} from an earlier session; renaming")
 
     agent = detect_agent(hook_input)
     log(f"prompt {prompt_count}: agent={agent}")
@@ -601,11 +625,13 @@ def run(hook_input: dict) -> None:
         log(f"tab.rename failed: {response}")
         return
 
+    updated_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     state["title"] = title
     state["tab_id"] = tab_id
     state["generated_at_prompt"] = prompt_count
-    state["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    state["updated_at"] = updated_at
     save_state(path, state)
+    save_state(tab_path, {"title": title, "session_id": session_id, "updated_at": updated_at})
     log(f"tab {tab_id} renamed to {title!r} at prompt {prompt_count}")
 
 
