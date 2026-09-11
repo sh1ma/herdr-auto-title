@@ -161,6 +161,14 @@ class MayOverwriteTest(unittest.TestCase):
     def test_overwrites_its_own_previous_title(self):
         self.assertTrue(hat.may_overwrite("old title", "old title"))
 
+    def test_overwrites_title_left_by_an_earlier_session_on_the_tab(self):
+        # 新しいセッションには previous_title が無いが、タブの記録が一致すれば自分のもの
+        self.assertTrue(hat.may_overwrite("old title", None, "old title"))
+        self.assertTrue(hat.may_overwrite("old title", "other", "old title"))
+
+    def test_keeps_manual_label_even_when_tab_record_exists(self):
+        self.assertFalse(hat.may_overwrite("my tab", None, "old title"))
+
 
 class DetectAgentTest(unittest.TestCase):
     def test_turn_id_means_codex(self):
@@ -231,6 +239,69 @@ class StatePathTest(unittest.TestCase):
         self.assertEqual(hat.state_path("abc-123").name, "abc-123.json")
         self.assertEqual(hat.state_path("../etc/passwd").name, ".._etc_passwd.json")
         self.assertEqual(hat.state_path("").name, "unknown.json")
+
+    def test_tab_state_lives_under_its_own_directory(self):
+        path = hat.tab_state_path("tab/1")
+        self.assertEqual(path.parent, hat.STATE_DIR / "tabs")
+        self.assertEqual(path.name, "tab_1.json")
+
+
+class RunTest(unittest.TestCase):
+    """herdr と生成 CLI を差し替えて run() の判断を通しで確認する。"""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        self.tab = {"label": "3"}
+        self.renames: list[str] = []
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        stack.enter_context(mock.patch.object(hat, "STATE_DIR", Path(self.tmpdir.name)))
+        stack.enter_context(mock.patch.object(hat, "herdr_call", self.fake_herdr_call))
+        stack.enter_context(mock.patch.object(hat, "resolve_tab_id", lambda: "t1"))
+        stack.enter_context(mock.patch.object(hat, "generate_title", self.fake_generate_title))
+        self.next_title = "first title"
+
+    def fake_herdr_call(self, method, params, timeout=3.0):
+        if method == "tab.get":
+            return {"result": {"tab": {"id": params["tab_id"], "label": self.tab["label"]}}}
+        if method == "tab.rename":
+            self.tab["label"] = params["label"]
+            self.renames.append(params["label"])
+            return {"result": {}}
+        raise AssertionError(f"unexpected call: {method}")
+
+    def fake_generate_title(self, conversation_log, agent):
+        return self.next_title
+
+    def submit(self, session_id, prompt="do the thing"):
+        hat.run({"session_id": session_id, "prompt": prompt})
+
+    def test_first_prompt_renames_default_label(self):
+        self.submit("s1")
+        self.assertEqual(self.renames, ["first title"])
+        self.assertEqual(self.tab["label"], "first title")
+
+    def test_new_session_in_the_same_tab_renames_again(self):
+        self.submit("s1")
+        self.next_title = "second title"
+        self.submit("s2")
+        self.assertEqual(self.renames, ["first title", "second title"])
+        self.assertEqual(self.tab["label"], "second title")
+
+    def test_new_session_leaves_a_label_the_user_typed(self):
+        self.submit("s1")
+        self.tab["label"] = "my tab"
+        self.next_title = "second title"
+        self.submit("s2")
+        self.assertEqual(self.renames, ["first title"])
+        self.assertEqual(self.tab["label"], "my tab")
+
+    def test_same_session_does_not_rename_twice_by_default(self):
+        self.submit("s1")
+        self.next_title = "second title"
+        self.submit("s1")
+        self.assertEqual(self.renames, ["first title"])
 
 
 class MainGuardTest(unittest.TestCase):
